@@ -1,0 +1,117 @@
+flowchart LR
+  %% ===========
+  %% DEV MACHINE
+  %% ===========
+  subgraph WIN["Windows Host"]
+    DD["Docker Desktop (daemon)\nWSL2 backend\n✅ DONE"]
+    B["Browser\nArgoCD UI via port-forward\n✅ DONE"]
+  end
+
+  subgraph WSL["WSL2"]
+    UB["Ubuntu-22.04 (WSL)\nDev shell\n✅ DONE"]
+    GITCFG["Git config (name/email)\n✅ DONE"]
+    SSH["SSH key for GitHub\nssh -T git@github.com\n✅ DONE"]
+  end
+
+  DD <--> UB
+  B <-->|"kubectl port-forward\n(local:8081 → svc:443)\n✅ DONE"| UB
+
+  %% ===========
+  %% SOURCE CTRL
+  %% ===========
+  subgraph GIT["Git (Source of Truth)"]
+    LOCAL["Local repo\n~/llm-inference-platform\n✅ DONE\n\nArtifacts:\n- YAML\n- Kustomize\n- (Helm later)"]
+    REMOTE["GitHub repo\nllm-inference-platform\n✅ DONE"]
+  end
+
+  LOCAL -->|"git add/commit\n✅ DONE"| LOCAL
+  LOCAL -->|"git push\n✅ DONE"| REMOTE
+  GITCFG --> LOCAL
+  SSH --> REMOTE
+
+  %% ===========
+  %% KUBERNETES
+  %% ===========
+  subgraph K8S["Kubernetes (k3d cluster: llm-local)\n✅ DONE"]
+    CP["Control Plane (server)\nAPI Server + Scheduler\n✅ DONE"]
+    W1["Worker agent-0\n✅ DONE"]
+    W2["Worker agent-1\n✅ DONE"]
+    LB["k3d LoadBalancer\nhost:8080 → cluster svc:80\n✅ DONE"]
+  end
+
+  UB -->|"k3d cluster create\nkubectl get nodes\n✅ DONE"| K8S
+
+  %% ===========
+  %% NAMESPACES
+  %% ===========
+  subgraph NS["Namespaces"]
+    NSARGO["argocd\n✅ DONE"]
+    NSDEF["default\n✅ DONE"]
+    NSLLM["llm\n⬜ PLANNED"]
+    NSMON["monitoring\n⬜ PLANNED"]
+  end
+  K8S --> NS
+
+  %% ===========
+  %% ARGOCD GITOPS
+  %% ===========
+  subgraph ARGO["ArgoCD (GitOps)\n✅ DONE"]
+    REPO["argocd-repo-server\npull Git"]
+    CTRL["argocd-application-controller\nreconcile desired vs live"]
+    SERVER["argocd-server (UI/API)\nsvc:443"]
+    APPCR["Application CR: hello-kube\nkubectl apply -f platform/argocd/...\n✅ DONE"]
+  end
+
+  NSARGO --> ARGO
+  REMOTE -->|"GitOps pull\nrepoURL/branch/path\n✅ DONE"| REPO
+  REPO --> CTRL
+  APPCR --> CTRL
+  CTRL -->|"Kubernetes API\napply manifests\n✅ DONE"| CP
+  SERVER --> B
+
+  %% ===========
+  %% CURRENT APP (DONE)
+  %% ===========
+  subgraph APPNOW["Current App (hello-kube)\n✅ DONE"]
+    DPLY["Deployment\nhashicorp/http-echo"]
+    SVC["Service type=LoadBalancer\nport 80 → target 5678"]
+    TEST["Test:\ncurl http://localhost:8080\n→ hello from argocd"]
+  end
+
+  NSDEF --> APPNOW
+  CTRL --> DPLY
+  DPLY --> SVC
+  LB --> SVC
+  SVC --> TEST
+
+  %% ===========
+  %% TARGET LLM PLATFORM (PLANNED)
+  %% ===========
+  subgraph TARGET["Target LLM Platform\n⬜ PLANNED"]
+    GW["FastAPI Gateway\n(auth/routing)\nDeployment+Service"]
+    VLLM["vLLM server\n(OpenAI-compatible)\nDeployment"]
+    MODEL["LLM Weights\n(PVC/cache)"]
+    VDB["Vector DB (Chroma)\nStatefulSet+PVC"]
+    RAG["RAG / Agents (optional)\nservice"]
+    OBS["Prometheus/Grafana\nmonitoring"]
+  end
+
+  NSLLM --> TARGET
+  GW --> VLLM --> MODEL
+  GW --> RAG --> VDB
+  GW --> OBS
+  VLLM --> OBS
+
+  REMOTE -->|"Manifests: YAML/Kustomize\n& Helm charts later\n⬜ PLANNED"| TARGET
+  CTRL -->|"Sync llm/monitoring resources\n⬜ PLANNED"| TARGET
+
+  %% ===========
+  %% IaC (PLANNED)
+  %% ===========
+  subgraph IAC["IaC\n⬜ PLANNED"]
+    TF["Terraform\nProvision infra:\nK8s cluster, nodes, GPU, network"]
+    ANS["Ansible (optional)\nNode config:\nNVIDIA drivers, hardening"]
+  end
+
+  TF -->|"Creates/updates infra\n(before apps)"| K8S
+  ANS -->|"Config nodes (if VM/bare metal)"| K8S
