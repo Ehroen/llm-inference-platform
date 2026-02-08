@@ -1,0 +1,6 @@
+apiVersion : v2
+name : hello-kube
+description : Hello World basic of an app deployed via HELM and ArgoCD
+type : application
+version : 0.1.0
+appversion : "1.0.0"
