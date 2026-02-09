@@ -1,0 +1,25 @@
+replicaCount: 1
+
+image:
+  repository: fastapi-gateway
+  tag: "local"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8000
+
+resources: {}
+# Example later:
+# resources:
+#   requests:
+#     cpu: "200m"
+#     memory: "256Mi"
+#   limits:
+#     cpu: "500m"
+#     memory: "512Mi"
+
+probes:
+  path: /health
+  initialDelaySeconds: 5
+  periodSeconds: 10
